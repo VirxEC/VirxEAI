@@ -21,27 +21,6 @@ class Mish(nn.Module):
 def t(x): return torch.from_numpy(x).float()
 
 
-# Actor module, categorical actions only
-# class Actor(nn.Module):
-#     def __init__(self, state_dim, n_actions, activation=nn.Tanh):
-#         super().__init__()
-
-#         layers = []
-
-#         for _ in range(n_actions):
-#             layers.extend([
-#                 nn.Linear(state_dim, state_dim),
-#                 activation()
-#             ])
-
-#         layers.extend([
-#             nn.Linear(state_dim, n_actions),
-#         ])
-
-#         self.model = nn.Sequential(*layers)
-
-#     def forward(self, X):
-#         return self.model(X)
 def Actor(state_dim, n_actions, activation=nn.Tanh):
     layers = [
         nn.Linear(state_dim, state_dim),
@@ -61,27 +40,6 @@ def Actor(state_dim, n_actions, activation=nn.Tanh):
     return nn.Sequential(*layers)
 
 
-# Critic module
-# class Critic(nn.Module):
-#     def __init__(self, state_dim, activation=nn.Tanh):
-#         super().__init__()
-
-#         layers = []
-
-#         # for _ in range(round(state_dim / 2)):
-#         layers.extend([
-#             nn.Linear(state_dim, state_dim),
-#             activation()
-#         ])
-
-#         layers.extend([
-#             nn.Linear(state_dim, 1)
-#         ])
-
-#         self.model = nn.Sequential(*layers)
-
-#     def forward(self, X):
-#         return self.model(X)
 def Critic(state_dim, activation=nn.Tanh):
     layers = [
         nn.Linear(state_dim, state_dim),
