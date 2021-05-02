@@ -55,7 +55,7 @@ class Obs(ObsBuilder):
 
         player_car = self._add_player_to_obs(obs, player, ball, inverted)  # 28
 
-        return t(np.array(obs))
+        return np.array(obs)
 
     def _add_player_to_obs(self, obs: List, player: PlayerData, ball: PhysicsObject, inverted: bool):
         if inverted:
