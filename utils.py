@@ -1,3 +1,4 @@
+import math
 import os
 
 import numpy as np
@@ -26,8 +27,10 @@ def Actor(state_dim, activation=nn.Tanh):
         nn.Linear(state_dim, round(state_dim / 2)),
         activation(),
         nn.Linear(round(state_dim / 2), round(state_dim / 2)),
+        nn.Dropout(0.1),
         activation(),
         nn.Linear(round(state_dim / 2), round(state_dim / 4)),
+        nn.Dropout(0.2),
         activation(),
         nn.Linear(round(state_dim / 4), 2),
     )
@@ -38,6 +41,7 @@ def Critic(state_dim, activation=nn.Tanh):
         nn.Linear(state_dim, round(state_dim / 2)),
         activation(),
         nn.Linear(round(state_dim / 2), round(state_dim / 4)),
+        nn.Dropout(0.2),
         activation(),
         nn.Linear(round(state_dim / 4), 1)
     )
@@ -77,9 +81,52 @@ def numpy_to_controller(actions):
     ]
 
 
+def train_model(s, name, actor, critic, adam_actor, adam_critic, states, actions, rewards):
+    import torch
+
+    last_prob_act = torch.distributions.Categorical(probs=torch.clamp(actor(states[0]), -1, 1) / 2 + 1).log_prob(actions[0])
+
+    for j in range(1, len(states)):
+        try:
+            last_state = states[j-1]
+            state = states[j]
+            action = actions[j]
+            reward = rewards[j]
+        except IndexError:
+            continue
+
+        advantage = reward + GAMMA*critic(state) - critic(last_state)
+
+        probs = torch.clamp(actor(state), -1, 1) / 2 + 1
+        dist = torch.distributions.Categorical(probs=probs)
+        prob_act = dist.log_prob(action)
+
+        actor_loss = policy_loss(last_prob_act.detach(), prob_act, advantage.detach(), EPS)
+        adam_actor.zero_grad()
+        actor_loss.backward()
+        clip_grad_norm_(adam_actor, MAX_GRAD_NORM)
+        adam_actor.step()
+
+        critic_loss = advantage.pow(2).mean()
+        adam_critic.zero_grad()
+        critic_loss.backward()
+        clip_grad_norm_(adam_critic, MAX_GRAD_NORM)
+        adam_critic.step()
+
+        last_prob_act = prob_act
+
+        # w[num_player].add_scalar(f"loss/{name}_advantage", advantage, global_step=s)
+        # w[num_player].add_scalar(f"actions/{name}_prob", dist.probs[1], global_step=s)
+        # w[num_player].add_scalar(f"loss/{name}_actor_loss", actor_loss, global_step=s)
+        # w[num_player].add_histogram(f"gradients/{name}_actor", torch.cat([p.grad.view(-1) for p in self.actors[i].parameters()]), global_step=s)
+        # w[num_player].add_scalar(f"loss/{name}_critic_loss", critic_loss, global_step=s)
+        # w[num_player].add_histogram(f"gradients/{name}_critic", torch.cat([p.data.view(-1) for p in self.critics[i].parameters()]), global_step=s)
+
+
 class Player:
     def __init__(self, num_players, new_ai, base_folder, train=False):
         print(f"Bulding player...")
+        self.cpu_count = max(os.cpu_count() - 4, 1)
         torch.set_num_threads(1)
         self.base_folder = base_folder
         self.num_players = num_players
@@ -114,7 +161,7 @@ class Player:
 
     def prepare_for_new_episode(self):
         self.states = [[] for _ in range(self.num_players)]
-        self.actions = [[] for _ in range(self.num_players)]
+        self.actions = [[[] for _ in range(N_ACTIONS)] for _ in range(self.num_players)]
         self.rewards = [[] for _ in range(self.num_players)]
 
     def step(self, states):
@@ -124,7 +171,6 @@ class Player:
             state = states[num_player]
 
             self.states[num_player].append(state)
-            self.actions[num_player].append([])
 
             actions.append([])
 
@@ -133,7 +179,7 @@ class Player:
                 dist = torch.distributions.Categorical(probs=probs)
 
                 action = dist.sample()
-                self.actions[num_player][-1].append(dist.sample())
+                self.actions[num_player][i].append(action)
                 actions[num_player].append(action.detach().data.numpy())
 
         return actions
@@ -163,8 +209,8 @@ class Player:
                         reward = self.rewards[num_player][j]
                     except IndexError:
                         continue
-                    advantage = reward + GAMMA*self.critics[i](state) - self.critics[i](last_state)
 
+                    advantage = reward + GAMMA*self.critics[i](state) - self.critics[i](last_state)
 
                     probs = torch.clamp(self.actors[i](state), -1, 1) / 2 + 1
                     dist = torch.distributions.Categorical(probs=probs)
@@ -181,14 +227,6 @@ class Player:
                     critic_loss.backward()
                     clip_grad_norm_(self.adam_critics[i], MAX_GRAD_NORM)
                     self.adam_critics[i].step()
-
-                    if j == num_states - 1:
-                        w[num_player].add_scalar(f"loss/{name}_advantage", advantage, global_step=s)
-                        w[num_player].add_scalar(f"actions/{name}_prob", dist.probs[1], global_step=s)
-                        w[num_player].add_scalar(f"loss/{name}_actor_loss", actor_loss, global_step=s)
-                        w[num_player].add_histogram(f"gradients/{name}_actor", torch.cat([p.grad.view(-1) for p in self.actors[i].parameters()]), global_step=s)
-                        w[num_player].add_scalar(f"loss/{name}_critic_loss", critic_loss, global_step=s)
-                        w[num_player].add_histogram(f"gradients/{name}_critic", torch.cat([p.data.view(-1) for p in self.critics[i].parameters()]), global_step=s)
 
                     last_prob_act = prob_act
 

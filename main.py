@@ -15,17 +15,18 @@ from torch.utils import tensorboard
 from making import Obs, Reward
 from utils import *
 
+NEW_AI = True
 TRAIN = True
+NUM_PLAYERS = 2
 
 tick_skip = 8
-max_steps = int(round(60 * 120 / tick_skip))
+max_steps = int(round(120 * 120 / tick_skip))
 
 #All we have to do now is pass our custom configuration objects to rlgym!
-num_players = 2
 env = rlgym.make(
     "default self",
     random_resets=True,
-    team_size=int(round(num_players / 2)),
+    team_size=int(round(NUM_PLAYERS / 2)),
     tick_skip=tick_skip,
     reward_fn=Reward(),
     obs_builder=Obs(),
@@ -33,16 +34,19 @@ env = rlgym.make(
 )
 
 s = 0
-new_ai = True
 
 base_folder = os.path.dirname(os.path.realpath(__file__))
-w = [tensorboard.SummaryWriter(log_dir=os.path.join(base_folder, "runs", f"{i}-{datetime.now().strftime('%Y-%m-%d %H;%M')}")) for i in range(num_players)]
-player = Player(num_players, new_ai, base_folder, TRAIN)
+runs_folder = os.path.join(base_folder, "runs")
+
+if not os.path.isdir(runs_folder):
+    os.mkdir(runs_folder)
+
+w = [tensorboard.SummaryWriter(log_dir=os.path.join(runs_folder, f"{i}-{datetime.now().strftime('%Y-%m-%d %H;%M')}")) for i in range(NUM_PLAYERS)]
+player = Player(NUM_PLAYERS, NEW_AI, base_folder, TRAIN)
 
 while True:
     mspt = []
     done = False
-    new_ai = False
     state = env.reset()
 
     while not done:
