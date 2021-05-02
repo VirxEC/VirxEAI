@@ -2,4 +2,4 @@ wheel
 numpy
 rlgym
 tensorboard
-pytorch
+torch
