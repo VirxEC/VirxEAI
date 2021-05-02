@@ -3,10 +3,27 @@ from typing import Any, List
 
 import numpy as np
 from rlgym.utils import common_values
+from rlgym.utils import math as rlmath
 from rlgym.utils.gamestates import GameState, PhysicsObject, PlayerData
 from rlgym.utils.obs_builders import ObsBuilder
+from rlgym.utils.reward_functions import RewardFunction
 
 from utils import t
+
+
+class Reward(RewardFunction):
+    def reset(self, initial_state: GameState, optional_data=None):
+        pass
+
+    def get_reward(self, player: PlayerData, state: GameState, previous_action: np.ndarray, optional_data=None):
+        # Vector version of v=d/t <=> t=d/v <=> 1/t=v/d
+        # Max value should be max_speed / ball_radius = 2300 / 94 = 24.5 / 100 = 0.245
+        # Used to guide the agent towards the ball
+        inv_t = rlmath.scalar_projection(player.car_data.linear_velocity, state.ball.position - player.car_data.position)
+        return inv_t / 100
+
+    def get_final_reward(self, player: PlayerData, state: GameState, previous_action: np.ndarray, optional_data=None):
+        return 0
 
 
 class Obs(ObsBuilder):

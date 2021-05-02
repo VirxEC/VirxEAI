@@ -21,42 +21,26 @@ class Mish(nn.Module):
 def t(x): return torch.from_numpy(x).float()
 
 
-def Actor(state_dim, n_actions, activation=nn.Tanh):
-    layers = [
-        nn.Linear(state_dim, state_dim),
-        activation()
-    ]
-
-    for _ in range(n_actions):
-        layers.extend([
-            nn.Linear(state_dim, state_dim),
-            activation()
-        ])
-
-    layers.extend([
-        nn.Linear(state_dim, n_actions),
-    ])
-
-    return nn.Sequential(*layers)
+def Actor(state_dim, activation=nn.Tanh):
+    return nn.Sequential(
+        nn.Linear(state_dim, round(state_dim / 2)),
+        activation(),
+        nn.Linear(round(state_dim / 2), round(state_dim / 2)),
+        activation(),
+        nn.Linear(round(state_dim / 2), round(state_dim / 4)),
+        activation(),
+        nn.Linear(round(state_dim / 4), 2),
+    )
 
 
 def Critic(state_dim, activation=nn.Tanh):
-    layers = [
-        nn.Linear(state_dim, state_dim),
-        activation()
-    ]
-
-    # for _ in range(round(state_dim / 2)):
-    layers.extend([
-        nn.Linear(state_dim, state_dim),
-        activation()
-    ])
-
-    layers.extend([
-        nn.Linear(state_dim, 1)
-    ])
-
-    return nn.Sequential(*layers)
+    return nn.Sequential(
+        nn.Linear(state_dim, round(state_dim / 2)),
+        activation(),
+        nn.Linear(round(state_dim / 2), round(state_dim / 4)),
+        activation(),
+        nn.Linear(round(state_dim / 4), 1)
+    )
 
 
 def cap(x, low, high):
@@ -93,29 +77,22 @@ def numpy_to_controller(actions):
     ]
 
 
-torch.autograd.set_detect_anomaly(True)
-
-
 class Player:
-    def __init__(self, new_ai, base_folder, train=False):
+    def __init__(self, num_players, new_ai, base_folder, train=False):
         print(f"Bulding player...")
+        torch.set_num_threads(1)
         self.base_folder = base_folder
-        self.total_reward = [0, 0]
+        self.num_players = num_players
 
         self.actors = []
         self.critics = []
         self.adam_actors = []
         self.adam_critics = []
-
-        self.dists = []
-        self.actions = []
-        self.probs = []
-        self.prob_acts = []
-        self.prev_prob_acts = []
+        self.prepare_for_new_episode()
 
         for i in range(N_ACTIONS):
             if new_ai:
-                self.actors.append(Actor(STATE_DIM, 2, activation=Mish))
+                self.actors.append(Actor(STATE_DIM, activation=Mish))
                 self.critics.append(Critic(STATE_DIM, activation=Mish))
             else:
                 action_name = ACTION_NAMES[i]
@@ -126,7 +103,7 @@ class Player:
 
             self.adam_actors.append(torch.optim.Adam(self.actors[i].parameters(), lr=3e-4))  # learning rate: 3e-4
             self.adam_critics.append(torch.optim.Adam(self.critics[i].parameters(), lr=1e-3))  # learning rate: 1e-3
-        
+
         print("Actor state dict:")
         for param_tensor in self.actors[0].state_dict():
             print(param_tensor, "\t", self.actors[0].state_dict()[param_tensor].size())
@@ -135,67 +112,98 @@ class Player:
         for param_tensor in self.critics[0].state_dict():
             print(param_tensor, "\t", self.critics[0].state_dict()[param_tensor].size())
 
-    def step(self, num_players, state):
-        self.dists = []
-        self.actions = []
-        self.probs = []
-        self.prob_acts = []
+    def prepare_for_new_episode(self):
+        self.states = [[] for _ in range(self.num_players)]
+        self.actions = [[] for _ in range(self.num_players)]
+        self.rewards = [[] for _ in range(self.num_players)]
+
+    def step(self, states):
         actions = []
 
-        for num_player in range(num_players):
-            self.dists.append([])
-            self.actions.append([])
-            self.probs.append([])
-            self.prob_acts.append([])
+        for num_player in range(self.num_players):
+            state = states[num_player]
+
+            self.states[num_player].append(state)
+            self.actions[num_player].append([])
+
             actions.append([])
 
             for i in range(N_ACTIONS):
-                self.probs[num_player].append(self.actors[i](state[num_player]))
-                probs = torch.clamp(self.probs[num_player][i].clone(), -1, 1) / 2 + 1
-                self.dists[num_player].append(torch.distributions.Categorical(probs=probs))
-                self.actions[num_player].append(self.dists[num_player][i].sample())
-                self.prob_acts[num_player].append(self.dists[num_player][i].log_prob(self.actions[num_player][i]))
-                actions[num_player].append(self.actions[num_player][i].detach().data.numpy())
+                probs = torch.clamp(self.actors[i](state), -1, 1) / 2 + 1
+                dist = torch.distributions.Categorical(probs=probs)
+
+                action = dist.sample()
+                self.actions[num_player][-1].append(dist.sample())
+                actions[num_player].append(action.detach().data.numpy())
 
         return actions
 
-    def learn(self, num_players, state, last_state, reward, w, s):
-        for num_player in range(num_players):
+    def add_reward(self, rewards):
+        for num_player in range(self.num_players):
+            self.rewards[num_player].append(rewards[num_player])
+
+    def get_total_rewards(self):
+        return [sum(player_rewards) for player_rewards in self.rewards]
+
+    def learn(self, w, s):
+        for num_player in range(self.num_players):
+            print(f"Training player {num_player}...")
             for i in range(N_ACTIONS):
                 name = ACTION_NAMES[i]
-                advantage = reward[num_player] + GAMMA*self.critics[i](state[num_player]) - self.critics[i](last_state[num_player])
+                print(f"Training {name}...")
 
-                w[num_player].add_scalar(f"loss/{name}_advantage", advantage, global_step=s)
-                w[num_player].add_scalar(f"actions/{name}_prob", self.dists[num_player][i].probs[1], global_step=s)
+                num_states = len(self.states[num_player])
+                last_prob_act = torch.distributions.Categorical(probs=torch.clamp(self.actors[i](self.states[num_player][0]), -1, 1) / 2 + 1).log_prob(self.actions[num_player][0][i])
+                
+                for j in range(1, num_states):
+                    try:
+                        last_state = self.states[num_player][j-1]
+                        state = self.states[num_player][j]
+                        action = self.actions[num_player][j][i]
+                        reward = self.rewards[num_player][j]
+                    except IndexError:
+                        continue
+                    advantage = reward + GAMMA*self.critics[i](state) - self.critics[i](last_state)
 
-                if len(self.prev_prob_acts) > 0:
-                    actor_loss = policy_loss(self.prev_prob_acts[num_player][i].detach(), self.prob_acts[num_player][i], advantage.detach(), EPS)
-                    w[num_player].add_scalar(f"loss/{name}_actor_loss", actor_loss, global_step=s)
+
+                    probs = torch.clamp(self.actors[i](state), -1, 1) / 2 + 1
+                    dist = torch.distributions.Categorical(probs=probs)
+                    prob_act = dist.log_prob(action)
+
+                    actor_loss = policy_loss(last_prob_act.detach(), prob_act, advantage.detach(), EPS)
                     self.adam_actors[i].zero_grad()
                     actor_loss.backward()
                     clip_grad_norm_(self.adam_actors[i], MAX_GRAD_NORM)
-                    w[num_player].add_histogram(f"gradients/{name}_actor", torch.cat([p.grad.view(-1) for p in self.actors[i].parameters()]), global_step=s)
                     self.adam_actors[i].step()
 
                     critic_loss = advantage.pow(2).mean()
-                    w[num_player].add_scalar(f"loss/{name}_critic_loss", critic_loss, global_step=s)
                     self.adam_critics[i].zero_grad()
                     critic_loss.backward()
                     clip_grad_norm_(self.adam_critics[i], MAX_GRAD_NORM)
-                    w[num_player].add_histogram(f"gradients/{name}_critic", torch.cat([p.data.view(-1) for p in self.critics[i].parameters()]), global_step=s)
                     self.adam_critics[i].step()
 
-        for num_player in range(num_players):
-            self.total_reward[num_player] += reward[num_player]
+                    if j == num_states - 1:
+                        w[num_player].add_scalar(f"loss/{name}_advantage", advantage, global_step=s)
+                        w[num_player].add_scalar(f"actions/{name}_prob", dist.probs[1], global_step=s)
+                        w[num_player].add_scalar(f"loss/{name}_actor_loss", actor_loss, global_step=s)
+                        w[num_player].add_histogram(f"gradients/{name}_actor", torch.cat([p.grad.view(-1) for p in self.actors[i].parameters()]), global_step=s)
+                        w[num_player].add_scalar(f"loss/{name}_critic_loss", critic_loss, global_step=s)
+                        w[num_player].add_histogram(f"gradients/{name}_critic", torch.cat([p.data.view(-1) for p in self.critics[i].parameters()]), global_step=s)
 
-        self.prev_prob_acts = [[prob_act.clone() for prob_act in prob_acts] for prob_acts in self.prob_acts]
+                    last_prob_act = prob_act
 
-    def end_episode(self, num_players, w, s):
-        for num_player in range(num_players):
-            w[num_player].add_scalar("reward/episode_reward", self.total_reward[num_player], global_step=s)
+    def end_episode(self, w, s):
+        total_rewards = self.get_total_rewards()
+        for num_player in range(self.num_players):
+            w[num_player].add_scalar("reward/episode_reward", total_rewards[num_player], global_step=s)
+
+        models = os.path.join(self.base_folder, "models")
+        if not os.path.isdir(models):
+            os.mkdir(models)
 
         for i in range(N_ACTIONS):
             action_name = ACTION_NAMES[i]
-            torch.save(self.actors[i].state_dict(), os.path.join(self.base_folder, "models", f"actor_{action_name}.pt"))
-            torch.save(self.critics[i].state_dict(), os.path.join(self.base_folder, "models", f"critic_{action_name}.pt"))
-        self.prev_prob_acts = []
+            torch.save(self.actors[i].state_dict(), os.path.join(models, f"actor_{action_name}.pt"))
+            torch.save(self.critics[i].state_dict(), os.path.join(models, f"critic_{action_name}.pt"))
+
+        self.prepare_for_new_episode()
