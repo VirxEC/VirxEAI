@@ -8,8 +8,6 @@ from rlgym.utils.gamestates import GameState, PhysicsObject, PlayerData
 from rlgym.utils.obs_builders import ObsBuilder
 from rlgym.utils.reward_functions import RewardFunction
 
-from utils import t
-
 
 class Reward(RewardFunction):
     def reset(self, initial_state: GameState, optional_data=None):
@@ -17,10 +15,10 @@ class Reward(RewardFunction):
 
     def get_reward(self, player: PlayerData, state: GameState, previous_action: np.ndarray, optional_data=None):
         # Vector version of v=d/t <=> t=d/v <=> 1/t=v/d
-        # Max value should be max_speed / ball_radius = 2300 / 94 = 24.5 / 100 = 0.245
+        # Max value should be max_speed / ball_radius = 2300 / 94.75 = 24.3 / 24.3 = 1
         # Used to guide the agent towards the ball
         inv_t = rlmath.scalar_projection(player.car_data.linear_velocity, state.ball.position - player.car_data.position)
-        return inv_t / 100
+        return inv_t / 24.3
 
     def get_final_reward(self, player: PlayerData, state: GameState, previous_action: np.ndarray, optional_data=None):
         return 0
@@ -38,14 +36,9 @@ class Obs(ObsBuilder):
         pass
 
     def build_obs(self, player: PlayerData, state: GameState, previous_action: np.ndarray) -> Any:
-        if player.team_num == common_values.ORANGE_TEAM:
-            inverted = True
-            ball = state.inverted_ball
-            # pads = state.inverted_boost_pads
-        else:
-            inverted = False
-            ball = state.ball
-            # pads = state.boost_pads
+        inverted = player.team_num == common_values.ORANGE_TEAM
+        ball = state.inverted_ball if inverted else state.ball
+        # pads = state.inverted_boost_pads if inverted else state.boost_pads
 
         obs = [
             *ball.position / self.POS_STD,  # 3
@@ -53,15 +46,12 @@ class Obs(ObsBuilder):
             *ball.angular_velocity / self.ANG_STD  # 9
         ]
 
-        player_car = self._add_player_to_obs(obs, player, ball, inverted)  # 28
+        self._add_player_to_obs(obs, player, ball, inverted)  # 28
 
         return np.array(obs)
 
     def _add_player_to_obs(self, obs: List, player: PlayerData, ball: PhysicsObject, inverted: bool):
-        if inverted:
-            player_car = player.inverted_car_data
-        else:
-            player_car = player.car_data
+        player_car = player.inverted_car_data if inverted else player.car_data
 
         obs.extend([
             *player_car.position / self.POS_STD,  # 3
@@ -74,5 +64,3 @@ class Obs(ObsBuilder):
             int(player.has_flip),  # 18
             int(player.is_demoed)  # 19
         ])
-
-        return player_car

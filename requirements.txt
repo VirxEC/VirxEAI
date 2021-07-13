@@ -1,6 +1,7 @@
-wheel
 numpy
 rlgym
 tensorboard
-torch
-psutil
+torch>=1.8.1
+stable-baselines3[extra]
+rlbot
+rlgym_compat
