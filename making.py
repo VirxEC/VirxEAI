@@ -21,16 +21,17 @@ class Reward():
         self.last_ball_touch = False
 
     def get_reward(self, player: PlayerData, state: GameState, previous_action: np.ndarray, optional_data=None):
-        # Vector version of v=d/t <=> t=d/v <=> 1/t=v/d
-        # Max value should be max_speed / ball_radius = 2300 / 94.75 = 24.3 / 30.375 = 0.8
-        # Used to guide the agent towards the ball
-        inv_t = scalar_projection(player.car_data.linear_velocity, state.ball.position - player.car_data.position) / 30.375
+        # Reward from -0.98 to 0.8
+        # 2300 / 94.75 = 24.3
+        # (24.3 / 24.3 - 0.1) * 0.888 = 0.7992
+        # (-24.3 / 24.3 - 0.1) * 0.888 = -0.9768
+        speed_towards_ball = (scalar_projection(player.car_data.linear_velocity, state.ball.position - player.car_data.position) / 24.3 - 0.1) * 0.888
 
-        # If an action caused the bot to touch the ball, give the bot a bonus reward of 0.2
+        # Reward of 0.2 for touching the ball
         ball_touch = 0.2 if player.ball_touched and not self.last_ball_touch else 0
         self.last_ball_touch = player.ball_touched
 
-        return inv_t + ball_touch
+        return speed_towards_ball + ball_touch
 
     def get_final_reward(self, player: PlayerData, state: GameState, previous_action: np.ndarray, optional_data=None):
         return 0
