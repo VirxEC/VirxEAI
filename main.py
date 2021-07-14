@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 from rlgym.utils.terminal_conditions.common_conditions import \
-    BallTouchedCondition
+    GoalScoredCondition
 from rlgym.wrappers.sb3_wrappers import SB3MultipleInstanceWrapper
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import CheckpointCallback
@@ -22,7 +22,7 @@ if __name__ == "__main__":
             random_resets=True,
             reward_function=Reward(),
             obs_builder=Obs(),
-            terminal_conditions=[BallTouchedCondition(),],
+            terminal_conditions=[GoalScoredCondition(),],
         )
 
     env = VecMonitor(SB3MultipleInstanceWrapper(path_to_rl, 3, get_args, wait_time=20))

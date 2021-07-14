@@ -2,29 +2,41 @@ import math
 from typing import Any, List
 
 import numpy as np
-from rlgym.utils import common_values
-from rlgym.utils import math as rlmath
-from rlgym.utils.gamestates import GameState, PhysicsObject, PlayerData
-from rlgym.utils.obs_builders import ObsBuilder
-from rlgym.utils.reward_functions import RewardFunction
+from rlgym_compat import common_values
+from rlgym_compat.physics_object import PhysicsObject
+from rlgym_compat.player_data import PlayerData
+from rlgym_compat.game_state import GameState
 
 
-class Reward(RewardFunction):
+def scalar_projection(vec, dest_vec):
+    norm = np.linalg.norm(dest_vec)
+    return 0 if norm == 0 else np.dot(vec, dest_vec) / norm
+
+class Reward():
+    def __init__(self):
+        super().__init__()
+        self.last_ball_touch = False
+
     def reset(self, initial_state: GameState, optional_data=None):
-        pass
+        self.last_ball_touch = False
 
     def get_reward(self, player: PlayerData, state: GameState, previous_action: np.ndarray, optional_data=None):
         # Vector version of v=d/t <=> t=d/v <=> 1/t=v/d
-        # Max value should be max_speed / ball_radius = 2300 / 94.75 = 24.3 / 24.3 = 1
+        # Max value should be max_speed / ball_radius = 2300 / 94.75 = 24.3 / 30.375 = 0.8
         # Used to guide the agent towards the ball
-        inv_t = rlmath.scalar_projection(player.car_data.linear_velocity, state.ball.position - player.car_data.position)
-        return inv_t / 24.3
+        inv_t = scalar_projection(player.car_data.linear_velocity, state.ball.position - player.car_data.position) / 30.375
+
+        # If an action caused the bot to touch the ball, give the bot a bonus reward of 0.2
+        ball_touch = 0.2 if player.ball_touched and not self.last_ball_touch else 0
+        self.last_ball_touch = player.ball_touched
+
+        return inv_t + ball_touch
 
     def get_final_reward(self, player: PlayerData, state: GameState, previous_action: np.ndarray, optional_data=None):
         return 0
 
 
-class Obs(ObsBuilder):
+class Obs():
     POS_STD = 2300
     ANG_STD = math.pi
     BOO_STD = 100
