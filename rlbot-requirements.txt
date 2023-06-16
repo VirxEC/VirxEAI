@@ -1,6 +1,0 @@
-wheel
-numpy
-rlbot==1.*
-rlgym_compat
-torch>=1.8.1
-stable-baselines3[extra]

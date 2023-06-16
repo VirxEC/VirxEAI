@@ -1,45 +1,32 @@
-import math
 from typing import Any, List
 
 import numpy as np
 from rlgym_compat import common_values
+from rlgym_compat.game_state import GameState
 from rlgym_compat.physics_object import PhysicsObject
 from rlgym_compat.player_data import PlayerData
-from rlgym_compat.game_state import GameState
+from rlgym_sim.utils.obs_builders import ObsBuilder
+from rlgym_sim.utils.reward_functions.combined_reward import CombinedReward
+from rlgym_sim.utils.reward_functions.common_rewards.player_ball_rewards import (
+    TouchBallReward, VelocityPlayerToBallReward)
+
+REWARD = CombinedReward(
+    [
+        VelocityPlayerToBallReward(),
+        TouchBallReward(),
+    ],
+    [
+        0.8,
+        0.2,
+    ]
+)
 
 
-def scalar_projection(vec, dest_vec):
-    norm = np.linalg.norm(dest_vec)
-    return 0 if norm == 0 else np.dot(vec, dest_vec) / norm
-
-class Reward():
-    def __init__(self):
-        super().__init__()
-        self.last_ball_touch = False
-
-    def reset(self, initial_state: GameState, optional_data=None):
-        self.last_ball_touch = False
-
-    def get_reward(self, player: PlayerData, state: GameState, previous_action: np.ndarray, optional_data=None):
-        # Reward from -0.98 to 0.8
-        # 2300 / 94.75 = 24.3
-        # (24.3 / 24.3 - 0.1) * 0.888 = 0.7992
-        # (-24.3 / 24.3 - 0.1) * 0.888 = -0.9768
-        speed_towards_ball = (scalar_projection(player.car_data.linear_velocity, state.ball.position - player.car_data.position) / 24.3 - 0.1) * 0.888
-
-        # Reward of 0.2 for touching the ball
-        ball_touch = 0.2 if player.ball_touched and not self.last_ball_touch else 0
-        self.last_ball_touch = player.ball_touched
-
-        return speed_towards_ball + ball_touch
-
-    def get_final_reward(self, player: PlayerData, state: GameState, previous_action: np.ndarray, optional_data=None):
-        return 0
-
-
-class Obs():
-    POS_STD = 2300
-    ANG_STD = math.pi
+class Obs(ObsBuilder):
+    VEL_STD = 2300
+    POS_STD = 6000
+    CAR_ANG_STD = 5.5
+    BALL_ANG_STD = 6
     BOO_STD = 100
 
     def __init__(self):
@@ -56,7 +43,7 @@ class Obs():
         obs = [
             *ball.position / self.POS_STD,  # 3
             *ball.linear_velocity / self.POS_STD,  # 6
-            *ball.angular_velocity / self.ANG_STD  # 9
+            *ball.angular_velocity / self.BALL_ANG_STD  # 9
         ]
 
         self._add_player_to_obs(obs, player, ball, inverted)  # 28
@@ -70,8 +57,8 @@ class Obs():
             *player_car.position / self.POS_STD,  # 3
             *player_car.forward(),  # 6
             *player_car.up(),  # 9
-            *player_car.linear_velocity / self.POS_STD,  # 12
-            *player_car.angular_velocity / self.ANG_STD,  # 15
+            *player_car.linear_velocity / self.VEL_STD,  # 12
+            *player_car.angular_velocity / self.CAR_ANG_STD,  # 15
             player.boost_amount / self.BOO_STD,  # 16
             int(player.on_ground),  # 17
             int(player.has_flip),  # 18

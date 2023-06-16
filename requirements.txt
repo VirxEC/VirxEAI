@@ -1,7 +1,9 @@
 numpy
-rlgym
+rlgym_sim @ git+https://github.com/AechPro/rocket-league-gym-sim@main
 tensorboard
-torch>=1.8.1
+--find-links https://download.pytorch.org/whl/torch_stable.html
+torch==1.11.0+cpu
 stable-baselines3[extra]
 rlbot
 rlgym_compat
+RocketSim

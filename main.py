@@ -1,31 +1,35 @@
 import os
 from pathlib import Path
 
-from rlgym.utils.terminal_conditions.common_conditions import \
-    GoalScoredCondition
-from rlgym.wrappers.sb3_wrappers import SB3MultipleInstanceWrapper
+import torch
+from rlgym_sim.envs.match import Match
+from rlgym_sim.utils.state_setters import DefaultState
+from rlgym_sim.utils.terminal_conditions.common_conditions import (
+    GoalScoredCondition, TimeoutCondition)
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import CheckpointCallback
 from stable_baselines3.common.vec_env import VecMonitor
 
-from making import Obs, Reward
+from making import REWARD, Obs
+from rlgym_tools.extra_action_parsers.kbm_act import KBMAction
+from rlgym_tools.sb3_tools.sb3_multiple_instance_env import \
+    SB3MultipleInstanceEnv
 
 if __name__ == "__main__":
-    NEW_AI = False
+    NEW_AI = True
 
-    path_to_rl="C:\\Program Files\\Epic Games\\rocketleague\\Binaries\\Win64\\rocketleague.exe"
-
-    def get_args():
-        return dict(
-            self_play=True,
-            team_size=1,
-            random_resets=True,
-            reward_function=Reward(),
+    def get_match():
+        return Match(
+            reward_function=REWARD,
+            terminal_conditions=[GoalScoredCondition(), TimeoutCondition(300)],
             obs_builder=Obs(),
-            terminal_conditions=[GoalScoredCondition(),],
+            action_parser=KBMAction(),
+            state_setter=DefaultState(),
+            team_size=1,
+            spawn_opponents=True,
         )
 
-    env = VecMonitor(SB3MultipleInstanceWrapper(path_to_rl, 3, get_args, wait_time=20))
+    env = VecMonitor(SB3MultipleInstanceEnv(get_match, "auto"))
 
     base_folder = Path(os.path.dirname(os.path.realpath(__file__)))
     logs_folder = base_folder / "logs"
@@ -46,6 +50,7 @@ if __name__ == "__main__":
     # Train our agent!
     while True:
         try:
+            print("Training model...")
             model.learn(100_000_000, callback=CheckpointCallback(100_000, "VirxEAI"))
         except KeyboardInterrupt:
             model.save("VirxEAI")
