@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 from rlgym_sim.envs.match import Match
-from rlgym_sim.utils.state_setters import DefaultState
+from rlgym_sim.utils.state_setters import RandomState
 from rlgym_sim.utils.terminal_conditions.common_conditions import (
     GoalScoredCondition, TimeoutCondition)
 from stable_baselines3 import PPO
@@ -20,10 +20,10 @@ if __name__ == "__main__":
     def get_match():
         return Match(
             reward_function=REWARD,
-            terminal_conditions=[GoalScoredCondition(), TimeoutCondition(300)],
+            terminal_conditions=[GoalScoredCondition(), TimeoutCondition(450)],
             obs_builder=Obs(),
             action_parser=KBMAction(),
-            state_setter=DefaultState(),
+            state_setter=RandomState(True, True, False),
             team_size=1,
             spawn_opponents=True,
         )
@@ -50,7 +50,7 @@ if __name__ == "__main__":
     while True:
         try:
             print("Training model...")
-            model.learn(100_000_000, callback=CheckpointCallback(100_000, "VirxEAI"))
+            model.learn(1_000_000_000, callback=CheckpointCallback(20_000, "VirxEAI", "VirxEAI"))
         except KeyboardInterrupt:
             model.save("VirxEAI")
             break

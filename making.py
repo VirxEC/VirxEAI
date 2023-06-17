@@ -5,18 +5,20 @@ from rlgym_compat import GameState, PhysicsObject, PlayerData, common_values
 from rlgym_sim.utils.obs_builders import ObsBuilder
 from rlgym_sim.utils.reward_functions.combined_reward import CombinedReward
 from rlgym_sim.utils.reward_functions.common_rewards import (
-    AlignBallGoal, BallYCoordinateReward, FaceBallReward, TouchBallReward)
+    AlignBallGoal, BallYCoordinateReward, FaceBallReward, TouchBallReward, VelocityReward, )
 
 REWARD = CombinedReward(
     [
         BallYCoordinateReward(),
+        VelocityReward(),
         FaceBallReward(),
         AlignBallGoal(),
         TouchBallReward(),
     ],
     [
         0.1,
-        0.15,
+        0.05,
+        0.1,
         0.5,
         0.25,
     ]

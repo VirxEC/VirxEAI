@@ -1,8 +1,9 @@
 import time
+
 import numpy as np
 import rlgym_sim
 from rlgym_sim.gym import Gym
-from rlgym_sim.utils.state_setters import DefaultState
+from rlgym_sim.utils.state_setters import RandomState
 from rlgym_sim.utils.terminal_conditions.common_conditions import (
     GoalScoredCondition, TimeoutCondition)
 
@@ -18,10 +19,10 @@ def main():
 
     env: Gym = rlgym_sim.make(
         reward_fn=REWARD,
-        terminal_conditions=[GoalScoredCondition(), TimeoutCondition(300)],
+        terminal_conditions=[GoalScoredCondition(), TimeoutCondition(450)],
         obs_builder=Obs(),
         action_parser=KBMAction(),
-        state_setter=DefaultState(),
+        state_setter=RandomState(True, True, False),
         team_size=1,
         spawn_opponents=True,
     )
