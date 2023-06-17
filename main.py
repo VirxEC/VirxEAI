@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+import torch
 from rlgym_sim.envs.match import Match
 from rlgym_sim.utils.state_setters import RandomState
 from rlgym_sim.utils.terminal_conditions.common_conditions import (
@@ -15,7 +16,15 @@ from rlgym_tools.sb3_tools.sb3_multiple_instance_env import \
     SB3MultipleInstanceEnv
 
 if __name__ == "__main__":
-    NEW_AI = False
+    NEW_AI = True
+    GPU_ACCEL = False
+
+    # check if "libpt_ocl.so" exists in the current directory
+    if GPU_ACCEL and os.path.isfile("libpt_ocl.so"):
+        torch.ops.load_library("libpt_ocl.so")
+        device = "privateuseone:0"
+    else:
+        device = "auto"
 
     def get_match():
         return Match(
@@ -41,7 +50,8 @@ if __name__ == "__main__":
     ppo_args = {
         "env": env,
         "verbose": 1,
-        "tensorboard_log": logs_folder
+        "tensorboard_log": logs_folder,
+        "device": device,
     }
 
     model = PPO("MlpPolicy", **ppo_args) if NEW_AI else PPO.load(base_folder / "VirxEAI.zip", **ppo_args)
