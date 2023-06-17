@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 
-import torch
 from rlgym_sim.envs.match import Match
 from rlgym_sim.utils.state_setters import DefaultState
 from rlgym_sim.utils.terminal_conditions.common_conditions import (
@@ -16,7 +15,7 @@ from rlgym_tools.sb3_tools.sb3_multiple_instance_env import \
     SB3MultipleInstanceEnv
 
 if __name__ == "__main__":
-    NEW_AI = True
+    NEW_AI = False
 
     def get_match():
         return Match(

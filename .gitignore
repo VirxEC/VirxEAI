@@ -115,7 +115,12 @@ ENV/
 .pylintrc
 
 #other stuff
-logs/
-VirxEAI/
+/logs
+/VirxEAI
 VirxEAI.zip
 collision_meshes
+/assets
+assets.path
+rlviser
+settings.txt
+umodel
