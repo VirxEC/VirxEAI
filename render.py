@@ -1,14 +1,12 @@
 import time
+from pathlib import Path
 
 import numpy as np
 import rlgym_sim
 from rlgym_sim.gym import Gym
-from rlgym_sim.utils.state_setters import RandomState
-from rlgym_sim.utils.terminal_conditions.common_conditions import (
-    GoalScoredCondition, TimeoutCondition)
 
 from agent import Agent
-from making import REWARD, Obs
+from making import REWARD, TERMINAL, Obs, ReplaySetter
 from rlgym_tools.extra_action_parsers.kbm_act import KBMAction
 
 TPS = 15
@@ -17,12 +15,18 @@ TPS = 15
 def main():
     print("Running match...")
 
+    with open("replay_path.txt", "r") as f:
+        replays_path = Path(f.read().strip()) / "ranked-duels"
+
+    replays = list(replays_path.glob("*.bin"))
+    num_replays = len(replays)
+
     env: Gym = rlgym_sim.make(
         reward_fn=REWARD,
-        terminal_conditions=[GoalScoredCondition(), TimeoutCondition(450)],
+        terminal_conditions=TERMINAL,
         obs_builder=Obs(),
         action_parser=KBMAction(),
-        state_setter=RandomState(True, True, False),
+        state_setter=ReplaySetter(replays, num_replays),
         team_size=1,
         spawn_opponents=True,
     )

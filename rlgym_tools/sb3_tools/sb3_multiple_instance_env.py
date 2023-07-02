@@ -32,14 +32,6 @@ class SB3MultipleInstanceEnv(SubprocVecEnv):
                                 Needs to be a function so that each subprocess can call it and get their own objects.
         :param num_instances: the number of Rocket League instances to start up,
                               or "auto" to estimate how many instances are supported (requires psutil).
-        :param wait_time: the time to wait between launching each instance. Default one minute.
-        :param force_paging: enable forced paging of each spawned rocket league instance to reduce memory utilization
-                             immediately, instead of allowing the OS to slowly page untouched allocations.
-                             WARNING: This will require you to potentially expand your Windows Page File, and it may
-                             substantially increase disk activity, leading to decreased disk lifetime.
-                             Use at your own peril.
-                             https://www.tomshardware.com/news/how-to-manage-virtual-memory-pagefile-windows-10,36929.html
-                             Default is off: OS dictates the behavior.
         """
         if callable(match_func_or_matches):
             assert num_instances is not None, (
