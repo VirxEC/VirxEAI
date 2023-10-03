@@ -116,7 +116,7 @@ ENV/
 
 #other stuff
 /logs
-/VirxEAI
+/data
 VirxEAI.zip
 collision_meshes
 /assets

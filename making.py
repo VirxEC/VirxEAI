@@ -13,7 +13,7 @@ from rlgym_sim.utils.state_setters import StateSetter, StateWrapper
 from rlgym_sim.utils.terminal_conditions.common_conditions import (
     GoalScoredCondition, TimeoutCondition)
 
-REWARD = CombinedReward(
+REWARD2 = CombinedReward(
     [
         BallYCoordinateReward(),
         VelocityReward(),
@@ -23,22 +23,25 @@ REWARD = CombinedReward(
     ],
     [
         0.15,
-        0.1,
-        0.2,
+        0.15,
         0.3,
-        0.25,
+        0.3,
+        0.1,
     ]
 )
 
+REWARD = VelocityReward()
+
 TERMINAL = [
     GoalScoredCondition(),
-    TimeoutCondition(225) # 1350 == 1.5 minutes, 4500 == 5 minutes
+    TimeoutCondition(45) # 45 = 3 seconds, 225 == 15 seconds, 1350 == 1.5 minutes, 4500 == 5 minutes
 ]
 
 
 class Obs(ObsBuilder):
     VEL_STD = 2300
-    POS_STD = 6000
+    BALL_VEL_STD = 6000
+    POS_STD = np.array([4096, 6000, 2044], dtype=np.float32)
     CAR_ANG_STD = 5.5
     BALL_ANG_STD = 6
     BOO_STD = 100
@@ -53,14 +56,20 @@ class Obs(ObsBuilder):
 
         obs = [
             *pads,
-            *previous_action,
             *ball.position / self.POS_STD,
-            *ball.linear_velocity / self.POS_STD,
+            *ball.linear_velocity / self.BALL_VEL_STD,
             *ball.angular_velocity / self.BALL_ANG_STD,
+            *previous_action,
         ]
 
-        for car in state.players:
-            self._add_player_to_obs(obs, car, inverted)
+        # add ourself first
+        self._add_player_to_obs(obs, player, inverted)
+
+        # add the opponent second
+        for other in state.players:
+            if other.car_id != player.car_id:
+                self._add_player_to_obs(obs, other, inverted)
+                break
 
         return np.array(obs, dtype=np.float32)
 
@@ -87,9 +96,9 @@ VEC_3_BYTES = 3 * FLOAT_BYTES
 QUAT_BYTES = 4 * FLOAT_BYTES
 
 class RigidBody:
-    def __init__(self, sleeping: bool, location: list[float], rotation: list[float], linear_velocity: list[float], angular_velocity: list[float]):
+    def __init__(self, sleeping: bool, location: tuple[float], rotation: tuple[float], linear_velocity: tuple[float], angular_velocity: tuple[float]):
         self.sleeping = sleeping
-        self.location = location
+        self.location = np.array(location, dtype=np.float32)
         self.rotation = rotation
         self.linear_velocity = linear_velocity
         self.angular_velocity = angular_velocity
@@ -112,7 +121,6 @@ class Tick:
     def __str__(self):
         return self.__repr__()
 
-import multiprocessing
 
 def ball_to_str(ball) -> str:
     return f"PhysicsWrapper(pos={list(ball.position)}, vel={list(ball.linear_velocity)}, ang={list(ball.angular_velocity)})"
@@ -131,23 +139,35 @@ class ReplaySetter(StateSetter):
     def reset(self, state_wrapper: StateWrapper):
         while True:
             tick = self._get_random_tick()
-            if self._valid_random_tick(tick):
+            if ReplaySetter._valid_random_tick(tick):
                 break
 
-        state_wrapper.ball.position = np.asarray(tick.ball.location)
+        state_wrapper.ball.position = tick.ball.location
         state_wrapper.ball.set_lin_vel(*tick.ball.linear_velocity)
         state_wrapper.ball.set_ang_vel(*tick.ball.angular_velocity)
 
         for i, car in enumerate(state_wrapper.cars):
-            car.position = np.asarray(tick.cars[i].location)
+            car.position = tick.cars[i].location
             car.set_lin_vel(*tick.cars[i].linear_velocity)
             car.set_ang_vel(*tick.cars[i].angular_velocity)
             car.set_rot(*quat_to_euler(tick.cars[i].rotation))
             car.boost = np.random.randint(0, 100)
 
-        # print(f"\n{multiprocessing.current_process().name}: {tick} | {sw_to_str(state_wrapper)}")
+    @staticmethod
+    def _invalid_pos(pos: np.ndarray) -> bool:
+        if any(np.isnan(pos)):
+            return True
+        if any(np.isinf(pos)):
+            return True
+        abs_pos = abs(pos)
+        return any((abs_pos[0] > 4096, abs_pos[1] > 6000, abs_pos[2] > 2044))
+    
+    @staticmethod
+    def _invalid_distance(pos1: np.ndarray, pos2: np.ndarray) -> bool:
+        return np.linalg.norm(pos1 - pos2) < 10
 
-    def _valid_random_tick(self, tick: Tick) -> bool:
+    @staticmethod
+    def _valid_random_tick(tick: Tick) -> bool:
         num_cars = len(tick.cars)
         if num_cars == 0 or num_cars % 2 != 0:
             return False
@@ -155,9 +175,12 @@ class ReplaySetter(StateSetter):
         if tick.ball.sleeping:
             return False
 
-        bad_locations = tuple(round(x) for x in tick.ball.location) == tuple(round(x) for x in tick.cars[0].location) or \
-            tuple(round(x) for x in tick.ball.location) == tuple(round(x) for x in tick.cars[1].location) or \
-            tuple(round(x) for x in tick.cars[0].location) == tuple(round(x) for x in tick.cars[1].location)
+        bad_locations = ReplaySetter._invalid_pos(tick.ball.location) or \
+            ReplaySetter._invalid_pos(tick.cars[0].location) or \
+            ReplaySetter._invalid_pos(tick.cars[1].location) or \
+            ReplaySetter._invalid_distance(tick.ball.location, tick.cars[0].location) or \
+            ReplaySetter._invalid_distance(tick.ball.location, tick.cars[1].location) or \
+            ReplaySetter._invalid_distance(tick.cars[0].location, tick.cars[1].location)
         if bad_locations:
             return False
 
